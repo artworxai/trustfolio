@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://live.linkedtrust.us';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://dev.linkedtrust.us';
 
 interface CreateClaimInput {
   subject: string;
@@ -13,39 +13,68 @@ interface CreateClaimInput {
   aspect?: string;
 }
 
+// SDK Pattern: Convert 1-5 stars to -1 to 1 score
+export function starsToScore(stars: number): number {
+  // Formula from SDK: (stars - 2.5) / 2.5
+  // 1 star → -0.6, 3 stars → 0.2, 5 stars → 1.0
+  return (stars - 2.5) / 2.5;
+}
+
+// SDK Pattern: Normalize URI (add https:// if missing)
+export function normalizeUri(uri: string): string {
+  if (!uri) return uri;
+  if (uri.startsWith('http://') || uri.startsWith('https://')) {
+    return uri;
+  }
+  return `https://${uri}`;
+}
+
+// Create claim with REAL API
+export async function createClaim(claimData: CreateClaimInput, token: string) {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/api/claims`,
+      {
+        ...claimData,
+        subject: normalizeUri(claimData.subject),
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error creating claim:', error);
+    throw error;
+  }
+}
+
+// Get claims from REAL API
+export async function getClaims(token: string) {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/api/claims`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching claims:', error);
+    throw error;
+  }
+}
+
+// LOCAL STORAGE FALLBACK (for demo/offline mode)
 interface StoredClaim extends CreateClaimInput {
   id: number;
   createdAt: string;
 }
 
-// Helper: Convert 1-5 stars to -1 to 1 score
-export function starsToScore(stars: number): number {
-  return (stars - 3) / 3;
-}
-
-// LOCAL STORAGE FUNCTIONS (for demo without auth)
-export async function createClaim(claimData: CreateClaimInput): Promise<StoredClaim> {
-  // Get existing claims from localStorage
-  const existingClaims = getLocalClaims();
-  
-  // Create new claim with ID and timestamp
-  const newClaim: StoredClaim = {
-    ...claimData,
-    id: Date.now(), // Use timestamp as unique ID
-    createdAt: new Date().toISOString()
-  };
-  
-  // Add to array
-  existingClaims.push(newClaim);
-  
-  // Save back to localStorage
-  localStorage.setItem('trustfolio_claims', JSON.stringify(existingClaims));
-  
-  return newClaim;
-}
-
 export function getLocalClaims(): StoredClaim[] {
-  if (typeof window === 'undefined') return []; // Server-side guard
+  if (typeof window === 'undefined') return [];
   
   const stored = localStorage.getItem('trustfolio_claims');
   if (!stored) return [];
@@ -57,36 +86,17 @@ export function getLocalClaims(): StoredClaim[] {
   }
 }
 
-export function getClaims(subject?: string): StoredClaim[] {
-  const claims = getLocalClaims();
+export async function createClaimLocal(claimData: CreateClaimInput): Promise<StoredClaim> {
+  const existingClaims = getLocalClaims();
   
-  if (!subject) return claims;
+  const newClaim: StoredClaim = {
+    ...claimData,
+    id: Date.now(),
+    createdAt: new Date().toISOString()
+  };
   
-  // Filter by subject if provided
-  return claims.filter(claim => claim.subject === subject);
+  existingClaims.push(newClaim);
+  localStorage.setItem('trustfolio_claims', JSON.stringify(existingClaims));
+  
+  return newClaim;
 }
-
-// FUTURE: Real API functions (commented out for now)
-/*
-export async function createClaimAPI(claimData: CreateClaimInput) {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/api/claims`, claimData);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating claim:', error);
-    throw error;
-  }
-}
-
-export async function getClaimsAPI(subject: string) {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/api/claims`, {
-      params: { subject }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching claims:', error);
-    throw error;
-  }
-}
-*/

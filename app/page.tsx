@@ -15,6 +15,21 @@ export default function Home() {
             Create LinkedClaims for your projects, skills, and accomplishments
           </p>
         </div>
+
+        <div className="mb-8 text-center">
+          <Link
+            href="/login"
+            className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition mr-4"
+          >
+            Sign In
+          </Link>
+          <Link
+            href="/register"
+            className="inline-block bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-50 transition border border-indigo-600"
+          >
+            Sign Up
+          </Link>
+        </div>
         
         <div className="grid md:grid-cols-2 gap-6">
           <Link 

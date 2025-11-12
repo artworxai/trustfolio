@@ -101,6 +101,24 @@ trustfolio/
 └── components/               # Future reusable components
 ```
 
+## API Integration
+
+This project integrates with the LinkedTrust backend API.
+
+### API Documentation
+- **Dev Environment:** https://dev.linkedtrust.us/api/docs/
+- **API Base URL:** https://dev.linkedtrust.us
+
+### Authentication
+- Uses Bearer token authentication
+- Sign up and login endpoints: `/auth/signup`, `/auth/login`
+
+### Claims API (v4)
+- Create claims: `POST /api/v4/claims`
+- Get claims by subject: `GET /api/v4/claims/subject/{uri}`
+
+For full API documentation, visit: https://dev.linkedtrust.us/api/docs/
+
 ## 🤝 Contributing
 
 This is a personal portfolio project, but suggestions are welcome! Feel free to open an issue.

@@ -3,12 +3,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClaim, starsToScore } from '@/lib/linkedclaims';
+import { useAuth } from '@/lib/auth-context';
+import { createClaim, createClaimLocal, starsToScore } from '@/lib/linkedclaims';
 
 export default function CreatePage() {
   const router = useRouter();
+  const { token, isAuthenticated, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     category: 'project',
     keywords: '',
@@ -54,24 +57,62 @@ export default function CreatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
-      await createClaim({
-        subject: `https://trustfolio.app/student/dana/${formData.category}`,
+      // Prepare claim data
+      const claimData = {
+        subject: user?.id 
+          ? `http://trustclaims.whatscookin.us/user/${user.id}`
+          : `https://trustfolio.app/student/dana`,
         claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
         statement: formData.statement,
         effectiveDate: formData.date,
-        howKnown: 'FIRST_HAND',
+        howKnown: 'FIRST_HAND' as const,
         stars: formData.stars,
         score: starsToScore(formData.stars),
         aspect: formData.category,
-      });
+      };
 
-      alert('Achievement created successfully! 🎉');
+      if (isAuthenticated && token) {
+        // Use real backend
+        console.log('Creating claim with backend...', claimData);
+        await createClaim(claimData, token);
+        alert('Achievement created successfully on LinkedTrust! 🎉');
+      } else {
+        // Fall back to localStorage
+        console.log('Creating claim locally...', claimData);
+        await createClaimLocal(claimData);
+        alert('Achievement saved locally! 📦\n\nSign in to sync to LinkedTrust backend.');
+      }
+
       router.push('/portfolio');
-    } catch (error) {
-      alert('Error creating claim. Check console for details.');
-      console.error(error);
+    } catch (error: any) {
+      console.error('Error creating claim:', error);
+      setError(error.message || 'Error creating claim. Check console for details.');
+      
+      // If backend fails, offer to save locally
+      if (isAuthenticated) {
+        const saveLocal = confirm('Backend error. Save locally instead?');
+        if (saveLocal) {
+          try {
+            await createClaimLocal({
+              subject: `https://trustfolio.app/student/dana`,
+              claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
+              statement: formData.statement,
+              effectiveDate: formData.date,
+              howKnown: 'FIRST_HAND',
+              stars: formData.stars,
+              score: starsToScore(formData.stars),
+              aspect: formData.category,
+            });
+            alert('Saved locally! 📦');
+            router.push('/portfolio');
+          } catch (localError) {
+            console.error('Local save failed:', localError);
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -85,9 +126,34 @@ export default function CreatePage() {
         </Link>
 
         <div className="bg-white rounded-xl shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">
-            Create New Achievement
-          </h1>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Create New Achievement
+            </h1>
+            {isAuthenticated ? (
+              <span className="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                ✅ Signed In
+              </span>
+            ) : (
+              <span className="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
+                📦 Local Mode
+              </span>
+            )}
+          </div>
+
+          {!isAuthenticated && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Tip:</strong> <Link href="/login" className="underline font-semibold">Sign in</Link> to save your achievements to the LinkedTrust network!
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -97,7 +163,7 @@ export default function CreatePage() {
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
                 <option value="project">Project</option>
                 <option value="skill">Skill</option>
@@ -105,7 +171,6 @@ export default function CreatePage() {
               </select>
             </div>
 
-            {/* NEW: Keywords input for AI */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Keywords (for AI generation)
@@ -115,14 +180,13 @@ export default function CreatePage() {
                 value={formData.keywords}
                 onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
                 placeholder="Python, LangChain, claims extraction, prompt engineering"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-900 mt-1">
                 Enter keywords about your achievement, then click generate!
               </p>
             </div>
 
-            {/* NEW: AI Generate Button */}
             <div>
               <button
                 type="button"
@@ -153,7 +217,7 @@ export default function CreatePage() {
                 required
                 rows={4}
                 placeholder="Built an AI-powered claims extraction system using Python, LangChain, and prompt engineering..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
               <p className="text-sm text-gray-500 mt-1">
                 Generated by AI or write your own
@@ -186,7 +250,7 @@ export default function CreatePage() {
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
 

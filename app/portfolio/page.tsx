@@ -2,142 +2,213 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getLocalClaims } from '@/lib/linkedclaims';
+import { useAuth } from '@/lib/auth-context';
+import { fetchClaimsByIssuer, getLocalClaims } from '@/lib/linkedclaims';
 
-interface StoredClaim {
+interface Claim {
   id: number;
   subject: string;
   claim: string;
   statement: string;
-  effectiveDate: string;
-  howKnown: string;
   stars?: number;
-  score?: number;
   aspect?: string;
-  createdAt: string;
+  effectiveDate?: string;
+  howKnown?: string;
+  createdAt?: string;
 }
 
 export default function PortfolioPage() {
-  const [claims, setClaims] = useState<StoredClaim[]>([]);
+  const { user, token, logout, isAuthenticated } = useAuth();
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [mode, setMode] = useState<'backend' | 'local'>('backend');
 
   useEffect(() => {
-    // Load claims from localStorage when component mounts
-    const loadedClaims = getLocalClaims();
-    setClaims(loadedClaims);
-  }, []);
+    loadClaims();
+  }, [token]);
 
-  const getCategoryEmoji = (aspect?: string) => {
-    switch (aspect) {
-      case 'project': return '🚀';
-      case 'skill': return '💡';
-      case 'certification': return '📜';
-      default: return '✨';
+  const loadClaims = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      if (isAuthenticated && token && user?.id) {
+        // Try to get claims from backend using user ID (issuer_id)
+        const response = await fetchClaimsByIssuer(user.id, token);
+        const backendClaims = response.claims || [];
+        setClaims(backendClaims);
+        setMode('backend');
+      } else {
+        // Fall back to localStorage
+        const localClaims = getLocalClaims();
+        setClaims(localClaims);
+        setMode('local');
+      }
+    } catch (err: any) {
+      console.error('Error loading claims:', err);
+      // Fall back to localStorage on error
+      const localClaims = getLocalClaims();
+      setClaims(localClaims);
+      setMode('local');
+      setError('Using local data (backend unavailable)');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStars = (stars?: number) => {
-    if (!stars) return '';
-    return '⭐'.repeat(stars);
+  const renderStars = (stars?: number) => {
+    if (!stars) return null;
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span key={star} className={star <= stars ? 'text-yellow-400' : 'text-gray-300'}>
+            ⭐
+          </span>
+        ))}
+      </div>
+    );
   };
+
+  const getClaimEmoji = (aspect?: string) => {
+    if (!aspect) return '🚀';
+    const lower = aspect.toLowerCase();
+    if (lower.includes('typescript') || lower.includes('javascript')) return '💻';
+    if (lower.includes('react') || lower.includes('next')) return '⚛️';
+    if (lower.includes('python')) return '🐍';
+    if (lower.includes('design')) return '🎨';
+    if (lower.includes('ai') || lower.includes('ml')) return '🤖';
+    return '🚀';
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="max-w-4xl mx-auto text-center py-20">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-xl text-gray-600">Loading your portfolio...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Your Portfolio
+              {isAuthenticated ? `${user?.name || user?.email}'s Portfolio` : 'Your Portfolio'}
             </h1>
             <p className="text-gray-600">
               {claims.length} achievement{claims.length !== 1 ? 's' : ''} recorded
             </p>
+            {mode === 'local' && (
+              <p className="text-sm text-orange-600 mt-1">
+                📦 Demo Mode - Using Local Storage
+              </p>
+            )}
+            {mode === 'backend' && (
+              <p className="text-sm text-green-600 mt-1">
+                ✅ Connected to LinkedTrust Backend
+              </p>
+            )}
           </div>
-          <div className="space-x-4">
+          <div className="flex gap-3">
             <Link
               href="/create"
-              className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition inline-block"
+              className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
             >
               + Add Achievement
             </Link>
-            <Link
-              href="/"
-              className="bg-white text-indigo-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-50 transition inline-block border border-indigo-600"
-            >
-              ← Home
-            </Link>
+            {isAuthenticated && (
+              <button
+                onClick={logout}
+                className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
 
+        <div className="mb-6">
+          <Link
+            href="/"
+            className="text-indigo-600 hover:text-indigo-800 font-semibold"
+          >
+            ← Home
+          </Link>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+            {error}
+          </div>
+        )}
+
+        {/* Claims Grid */}
         {claims.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+          <div className="text-center py-20">
             <div className="text-6xl mb-4">📭</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-2xl font-bold text-gray-700 mb-2">
               No achievements yet
             </h2>
             <p className="text-gray-600 mb-6">
-              Start building your verifiable portfolio by creating your first achievement!
+              Start building your portfolio by creating your first claim!
             </p>
             <Link
               href="/create"
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition inline-block"
+              className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
             >
-              Create Your First Achievement
+              Create First Achievement
             </Link>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-6">
             {claims.map((claim) => (
               <div
                 key={claim.id}
-                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition"
+                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="text-4xl">
-                    {getCategoryEmoji(claim.aspect)}
+                <div className="flex items-start gap-4">
+                  <div className="text-4xl">{getClaimEmoji(claim.aspect)}</div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {claim.aspect || 'Project'}
+                      </h3>
+                      {renderStars(claim.stars)}
+                    </div>
+                    <p className="text-gray-700 mb-3">{claim.statement}</p>
+                    <div className="flex gap-4 text-sm text-gray-500">
+                      {claim.howKnown && (
+                        <span className="bg-gray-100 px-3 py-1 rounded-full">
+                          {claim.howKnown.replace('_', ' ')}
+                        </span>
+                      )}
+                      {claim.effectiveDate && (
+                        <span>📅 Created: {new Date(claim.effectiveDate).toLocaleDateString()}</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {new Date(claim.effectiveDate).toLocaleDateString()}
-                  </div>
-                </div>
-
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 capitalize">
-                  {claim.aspect || claim.claim}
-                </h3>
-
-                <p className="text-gray-600 text-sm mb-4 line-clamp-3">
-                  {claim.statement}
-                </p>
-
-                <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                  <div className="text-yellow-500">
-                    {getStars(claim.stars)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {claim.howKnown.replace('_', ' ')}
-                  </div>
-                </div>
-
-                <div className="mt-3 text-xs text-gray-400">
-                  Created: {new Date(claim.createdAt).toLocaleDateString()}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        <div className="mt-12 bg-white rounded-xl shadow-md p-6">
+        <div className="mt-12 p-6 bg-white rounded-xl shadow-md">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">
-            💡 About Your Portfolio
+            About Your Portfolio
           </h3>
-          <p className="text-gray-600 text-sm">
-            Each achievement is stored locally in your browser. In the future, these can be:
+          <p className="text-gray-600">
+            Your achievements are {mode === 'backend' ? 'stored on the LinkedTrust network' : 'saved locally in your browser'}.
+            {mode === 'backend' 
+              ? ' They are verifiable and can be shared with others.'
+              : ' Sign in to sync them to the LinkedTrust backend.'}
           </p>
-          <ul className="list-disc list-inside text-gray-600 text-sm mt-2 space-y-1">
-            <li>Published to the LinkedTrust network</li>
-            <li>Shared with employers via unique links</li>
-            <li>Exported to PDF or LinkedIn</li>
-            <li>Verified by others</li>
-          </ul>
         </div>
       </div>
     </main>

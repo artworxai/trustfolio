@@ -11,12 +11,11 @@ interface CreateClaimInput {
   stars?: number;
   score?: number;
   aspect?: string;
+  issuerId?: string;
 }
 
 // SDK Pattern: Convert 1-5 stars to -1 to 1 score
 export function starsToScore(stars: number): number {
-  // Formula from SDK: (stars - 2.5) / 2.5
-  // 1 star → -0.6, 3 stars → 0.2, 5 stars → 1.0
   return (stars - 2.5) / 2.5;
 }
 
@@ -29,7 +28,7 @@ export function normalizeUri(uri: string): string {
   return `https://${uri}`;
 }
 
-// Create claim with REAL API
+// Create claim with REAL API v4
 export async function createClaim(claimData: CreateClaimInput, token: string) {
   try {
     const response = await axios.post(
@@ -37,6 +36,7 @@ export async function createClaim(claimData: CreateClaimInput, token: string) {
       {
         ...claimData,
         subject: normalizeUri(claimData.subject),
+        score: claimData.stars ? starsToScore(claimData.stars) : claimData.score,
       },
       {
         headers: {
@@ -52,10 +52,14 @@ export async function createClaim(claimData: CreateClaimInput, token: string) {
   }
 }
 
-// Get claims from REAL API
-export async function getClaims(token: string) {
+// Get claims from REAL API v4 by subject URI
+export async function getClaims(token: string, subjectUri?: string) {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/claims`, {
+    const endpoint = subjectUri 
+      ? `${API_BASE_URL}/api/v4/claims/subject/${encodeURIComponent(subjectUri)}`
+      : `${API_BASE_URL}/api/v4/claims`;
+      
+    const response = await axios.get(endpoint, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -63,6 +67,77 @@ export async function getClaims(token: string) {
     return response.data;
   } catch (error) {
     console.error('Error fetching claims:', error);
+    throw error;
+  }
+}
+
+// Fetch claims by issuer ID (the correct way according to Golda!)
+export async function fetchClaimsByIssuer(userId: number, token: string) {
+  try {
+    console.log('Fetching claims by issuer ID:', userId);
+    
+    const response = await axios.get(
+      `${API_BASE_URL}/api/claim`,
+      {
+        params: {
+          issuer_id: `http://trustclaims.whatscookin.us/user/${userId}`,
+          limit: 50,
+          page: 1
+        },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+    
+    console.log('Claims found:', response.data.claims ? response.data.claims.length : 0);
+    console.log('Response data:', response.data);
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching claims by issuer:', error);
+    throw error;
+  }
+}
+
+// Get claims by current user (uses the authenticated user's URI)
+export async function getMyClaimsFromBackend(token: string, userEmail: string) {
+  try {
+    // Construct the subject URI from user email (pattern from talent repo)
+    const subjectUri = `https://dev.linkedtrust.us/user/${userEmail}`;
+    
+    // URL encode the URI (similar to Base64 encoding in talent repo)
+    const encodedUri = encodeURIComponent(subjectUri);
+    
+    console.log('Fetching claims for subject:', subjectUri);
+    console.log('Encoded URI:', encodedUri);
+    
+    // Get claims for this subject
+    const response = await axios.get(
+      `${API_BASE_URL}/api/v4/claims/subject/${encodedUri}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log('Raw API Response:', response);
+    console.log('Response data:', response.data);
+    console.log('Response data type:', typeof response.data);
+    console.log('Is response.data an array?:', Array.isArray(response.data));
+
+    // Handle different response formats
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    } else if (response.data && response.data.claims) {
+      return response.data.claims; // Might be wrapped in { claims: [...] }
+    } else {
+      console.error('Unexpected response format:', response.data);
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching my claims:', error);
     throw error;
   }
 }

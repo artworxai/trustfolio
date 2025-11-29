@@ -2,11 +2,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 
 interface User {
   id: number;
   email: string;
   name?: string;
+  issuerId?: number;
 }
 
 interface AuthContextType {
@@ -24,17 +26,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
-    // Load token and user from localStorage on mount
-    const savedToken = localStorage.getItem('auth_token');
-    const savedUser = localStorage.getItem('auth_user');
-    
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+    // Priority 1: Check NextAuth session (Google OAuth)
+    if (session?.user) {
+      console.log('NextAuth session found:', session);
+      const sessionUser: User = {
+        id: (session.user as any).issuerId || 0,
+        email: session.user.email || '',
+        name: session.user.name || '',
+        issuerId: (session.user as any).issuerId,
+      };
+      setUser(sessionUser);
+      setToken('nextauth_session'); // Placeholder token
+      return;
     }
-  }, []);
+
+    // Priority 2: Check localStorage (email/password login)
+    if (status !== 'loading') {
+      const savedToken = localStorage.getItem('auth_token');
+      const savedUser = localStorage.getItem('auth_user');
+      
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
+      }
+    }
+  }, [session, status]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -52,10 +71,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
+      console.log('Login response:', data);
       
-      // Handle different response structures
-      const authToken = data.token || data.access_token || data.accessToken;
-      const userData = data.user || data;
+      // Updated to match API response structure
+      const userData: User = {
+        id: data.user?.id || data.issuer_id || data.id,
+        email: data.user?.email || data.email || email,
+        name: data.user?.name || data.name || email.split('@')[0],
+        issuerId: data.user?.id || data.issuer_id,
+      };
+      
+      const authToken = data.accessToken || data.token || data.access_token || 'demo_token';
       
       setToken(authToken);
       setUser(userData);
@@ -91,10 +117,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
+      console.log('Registration response:', data);
       
-      // Handle different response structures
-      const authToken = data.token || data.access_token || data.accessToken;
-      const userData = data.user || data;
+      // Updated to match API response structure
+      const userData: User = {
+        id: data.user?.id || data.issuer_id || data.id,
+        email: data.user?.email || data.email || email,
+        name: data.user?.name || data.name || name || email.split('@')[0],
+        issuerId: data.user?.id || data.issuer_id,
+      };
+      
+      const authToken = data.accessToken || data.token || data.access_token || 'demo_token';
       
       setToken(authToken);
       setUser(userData);
@@ -110,11 +143,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // Clear local state
     setToken(null);
     setUser(null);
+    
+    // Clear localStorage
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
     localStorage.removeItem('trustfolio_claims');
+    
+    // Sign out of NextAuth if Google OAuth session exists
+    if (session) {
+      signOut({ redirect: false });
+    }
+    
     router.push('/login');
   };
 
@@ -126,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
-        isAuthenticated: !!token,
+        isAuthenticated: !!user || !!session,
       }}
     >
       {children}

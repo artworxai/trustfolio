@@ -33,14 +33,17 @@ export default function PortfolioPage() {
     setError('');
     
     try {
-      if (isAuthenticated && token && user?.id) {
+      const hasBackendToken = token && token !== 'nextauth_session';
+      
+      if (isAuthenticated && hasBackendToken && (user?.issuerId || user?.id)) {
         // Try to get claims from backend using user ID (issuer_id)
-        const response = await fetchClaimsByIssuer(user.id, token);
+        const userId = user.issuerId || user.id;
+        const response = await fetchClaimsByIssuer(userId, token);
         const backendClaims = response.claims || [];
         setClaims(backendClaims);
         setMode('backend');
       } else {
-        // Fall back to localStorage
+        // Fall back to localStorage for OAuth users or unauthenticated users
         const localClaims = getLocalClaims();
         setClaims(localClaims);
         setMode('local');
@@ -104,9 +107,18 @@ export default function PortfolioPage() {
             <p className="text-gray-600">
               {claims.length} achievement{claims.length !== 1 ? 's' : ''} recorded
             </p>
-            {mode === 'local' && (
+            {mode === 'local' && token === 'nextauth_session' && (
+              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>📱 OAuth User:</strong> Your achievements are saved locally in your browser.
+                  <br />
+                  <span className="text-xs">Backend OAuth integration coming soon! For now, use email/password login to sync to LinkedTrust.</span>
+                </p>
+              </div>
+            )}
+            {mode === 'local' && token !== 'nextauth_session' && (
               <p className="text-sm text-orange-600 mt-1">
-                📦 Demo Mode - Using Local Storage
+                📦 Local Storage Mode - Sign in to sync to backend
               </p>
             )}
             {mode === 'backend' && (
@@ -207,7 +219,7 @@ export default function PortfolioPage() {
             Your achievements are {mode === 'backend' ? 'stored on the LinkedTrust network' : 'saved locally in your browser'}.
             {mode === 'backend' 
               ? ' They are verifiable and can be shared with others.'
-              : ' Sign in to sync them to the LinkedTrust backend.'}
+              : ' Sign in with email/password to sync them to the LinkedTrust backend.'}
           </p>
         </div>
       </div>

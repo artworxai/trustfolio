@@ -54,69 +54,82 @@ export default function CreatePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
 
-    try {
-      // Prepare claim data
-      const claimData = {
-        subject: user?.id 
-          ? `http://trustclaims.whatscookin.us/user/${user.id}`
-          : `https://trustfolio.app/student/dana`,
-        claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
-        statement: formData.statement,
-        effectiveDate: formData.date,
-        howKnown: 'FIRST_HAND' as const,
-        stars: formData.stars,
-        score: starsToScore(formData.stars),
-        aspect: formData.category,
-      };
+  try {
+    // Get the user ID - works for both OAuth and email/password
+    const userId = user?.issuerId || user?.id;
+    
+    // Check if user has a REAL backend token (not just NextAuth session)
+    const hasBackendToken = token && token !== 'nextauth_session';
+    const isOAuthUser = token === 'nextauth_session';
+    
+    // Prepare claim data
+    const claimData = {
+      subject: user?.issuerId || user?.id
+        ? `http://trustclaims.whatscookin.us/user/${user.issuerId || user.id}`
+        : `https://trustfolio.app/student/dana`,
+      claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
+      statement: formData.statement,
+      effectiveDate: formData.date,
+      howKnown: 'FIRST_HAND' as const,
+      stars: formData.stars,
+      score: starsToScore(formData.stars),
+      aspect: formData.category,
+    };
 
-      if (isAuthenticated && token) {
-        // Use real backend
-        console.log('Creating claim with backend...', claimData);
-        await createClaim(claimData, token);
-        alert('Achievement created successfully on LinkedTrust! 🎉');
-      } else {
-        // Fall back to localStorage
-        console.log('Creating claim locally...', claimData);
-        await createClaimLocal(claimData);
-        alert('Achievement saved locally! 📦\n\nSign in to sync to LinkedTrust backend.');
-      }
-
+    // Only use backend if user has a real backend token (email/password users)
+    if (hasBackendToken && userId) {
+      console.log('Creating claim with backend...', claimData);
+      await createClaim(claimData, token);
+      alert('Achievement created successfully on LinkedTrust! 🎉');
       router.push('/portfolio');
-    } catch (error: any) {
-      console.error('Error creating claim:', error);
-      setError(error.message || 'Error creating claim. Check console for details.');
+    } else {
+      // OAuth users or unauthenticated users save locally
+      console.log('Creating claim locally...', claimData);
+      await createClaimLocal(claimData);
       
-      // If backend fails, offer to save locally
-      if (isAuthenticated) {
-        const saveLocal = confirm('Backend error. Save locally instead?');
-        if (saveLocal) {
-          try {
-            await createClaimLocal({
-              subject: `https://trustfolio.app/student/dana`,
-              claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
-              statement: formData.statement,
-              effectiveDate: formData.date,
-              howKnown: 'FIRST_HAND',
-              stars: formData.stars,
-              score: starsToScore(formData.stars),
-              aspect: formData.category,
-            });
-            alert('Saved locally! 📦');
-            router.push('/portfolio');
-          } catch (localError) {
-            console.error('Local save failed:', localError);
-          }
-        }
+      if (isOAuthUser) {
+        alert('Achievement saved locally! 📦\n\nNote: Google OAuth users currently save to local storage. Backend OAuth integration coming soon!');
+      } else {
+        alert('Achievement saved locally! 📦\n\nSign in with email/password to sync to LinkedTrust backend.');
       }
-    } finally {
-      setLoading(false);
+      router.push('/portfolio');
     }
-  };
+  } catch (error: any) {
+    console.error('Error creating claim:', error);
+    setError(error.message || 'Error creating claim. Check console for details.');
+    
+    // Offer to save locally on error
+    const saveLocal = confirm('Backend error. Save locally instead?');
+    if (saveLocal) {
+      try {
+        const userId = user?.issuerId || user?.id;
+        await createClaimLocal({
+          subject: userId 
+            ? `http://trustclaims.whatscookin.us/user/${userId}`
+            : `https://trustfolio.app/student/dana`,
+          claim: formData.category === 'skill' ? 'HAS_SKILL' : 'COMPLETED_PROJECT',
+          statement: formData.statement,
+          effectiveDate: formData.date,
+          howKnown: 'FIRST_HAND',
+          stars: formData.stars,
+          score: starsToScore(formData.stars),
+          aspect: formData.category,
+        });
+        alert('Saved locally! 📦');
+        router.push('/portfolio');
+      } catch (localError) {
+        console.error('Local save failed:', localError);
+      }
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-100">

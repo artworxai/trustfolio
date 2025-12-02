@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import GitHubProvider from "next-auth/providers/github";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://dev.linkedtrust.us';
 
@@ -9,13 +10,18 @@ const handler = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+    GitHubProvider({
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    }),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
       try {
-        console.log("=== GOOGLE OAUTH SIGNIN ===");
-        console.log("Google sign-in attempt:", user.email);
-        console.log("User ID from Google:", user.id);
+        const provider = account?.provider || 'unknown';
+        console.log(`=== ${provider.toUpperCase()} OAUTH SIGNIN ===`);
+        console.log(`${provider} sign-in attempt:`, user.email);
+        console.log("User ID from provider:", user.id);
         console.log("API Base URL:", API_BASE_URL);
         
         // STEP 1: Try OAuth login first (for existing OAuth users)
@@ -27,7 +33,7 @@ const handler = NextAuth({
           },
           body: JSON.stringify({
             email: user.email,
-            password: `google_oauth_${user.id}`,
+            password: `${provider}_oauth_${user.id}`,
           }),
         });
 
@@ -38,10 +44,9 @@ const handler = NextAuth({
           console.log("✅ Existing OAuth user logged in successfully");
           console.log("Full login response:", JSON.stringify(loginData, null, 2));
           
-          // Try different possible field names
           (user as any).issuerId = loginData.user?.id;
           console.log("Stored issuer_id:", (user as any).issuerId);
-          console.log("=== END OAUTH SIGNIN (SUCCESS) ===");
+          console.log(`=== END ${provider.toUpperCase()} SIGNIN (SUCCESS) ===`);
           return true;
         }
 
@@ -54,7 +59,7 @@ const handler = NextAuth({
           },
           body: JSON.stringify({
             email: user.email,
-            password: `google_oauth_${user.id}`,
+            password: `${provider}_oauth_${user.id}`,
             name: user.name || user.email?.split('@')[0],
           }),
         });
@@ -66,10 +71,9 @@ const handler = NextAuth({
           console.log("✅ New user registered successfully");
           console.log("Full register response:", JSON.stringify(registerData, null, 2));
           
-          // Try different possible field names
-          (user as any).issuerId = registerData.issuer_id || registerData.issuerId || registerData.id;
+          (user as any).issuerId = registerData.user?.id || registerData.issuer_id || registerData.issuerId || registerData.id;
           console.log("Stored issuer_id:", (user as any).issuerId);
-          console.log("=== END OAUTH SIGNIN (SUCCESS) ===");
+          console.log(`=== END ${provider.toUpperCase()} SIGNIN (SUCCESS) ===`);
           return true;
         }
 
@@ -79,8 +83,8 @@ const handler = NextAuth({
           console.log("📧 Account linking needed - user can sign in but won't have backend access");
           console.log("NOTE: User should either:");
           console.log("  1. Use their original email/password login, OR");
-          console.log("  2. Contact admin to link Google account");
-          console.log("=== END OAUTH SIGNIN (PARTIAL - NO BACKEND LINK) ===");
+          console.log("  2. Contact admin to link account");
+          console.log(`=== END ${provider.toUpperCase()} SIGNIN (PARTIAL - NO BACKEND LINK) ===`);
           
           return true;
         }
@@ -88,12 +92,12 @@ const handler = NextAuth({
         // STEP 4: Other registration error
         const errorText = await registerResponse.text();
         console.error("❌ Registration failed with unexpected error:", errorText);
-        console.log("=== END OAUTH SIGNIN (FAILED) ===");
+        console.log(`=== END ${provider.toUpperCase()} SIGNIN (FAILED) ===`);
         
         return true;
 
       } catch (error) {
-        console.error("❌ CRITICAL ERROR during Google OAuth backend integration:", error);
+        console.error(`❌ CRITICAL ERROR during ${account?.provider} OAuth backend integration:`, error);
         console.log("=== END OAUTH SIGNIN (ERROR) ===");
         return true;
       }

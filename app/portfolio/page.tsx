@@ -60,6 +60,41 @@ export default function PortfolioPage() {
     }
   };
 
+  const deleteClaim = async (claimId: number) => {
+    const confirmDelete = confirm('Are you sure you want to delete this achievement? This action cannot be undone.');
+    
+    if (!confirmDelete) return;
+    
+    try {
+      if (mode === 'backend' && token && token !== 'nextauth_session') {
+        // Delete from backend
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/claims/${claimId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete from backend');
+        
+        alert('Achievement deleted successfully! 🗑️');
+      } else {
+        // Delete from localStorage
+        const localClaims = getLocalClaims();
+        const updatedClaims = localClaims.filter(claim => claim.id !== claimId);
+        localStorage.setItem('trustfolio_claims', JSON.stringify(updatedClaims));
+        
+        alert('Achievement deleted from local storage! 🗑️');
+      }
+      
+      // Reload claims
+      loadClaims();
+    } catch (error) {
+      console.error('Error deleting claim:', error);
+      alert('Failed to delete achievement. Please try again.');
+    }
+  };
+
   const renderStars = (stars?: number) => {
     if (!stars) return null;
     return (
@@ -182,7 +217,7 @@ export default function PortfolioPage() {
             {claims.map((claim) => (
               <div
                 key={claim.id}
-                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow"
+                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 border border-transparent hover:border-indigo-200"
               >
                 <div className="flex items-start gap-4">
                   <div className="text-4xl">{getClaimEmoji(claim.aspect)}</div>
@@ -194,15 +229,24 @@ export default function PortfolioPage() {
                       {renderStars(claim.stars)}
                     </div>
                     <p className="text-gray-700 mb-3">{claim.statement}</p>
-                    <div className="flex gap-4 text-sm text-gray-500">
-                      {claim.howKnown && (
-                        <span className="bg-gray-100 px-3 py-1 rounded-full">
-                          {claim.howKnown.replace('_', ' ')}
-                        </span>
-                      )}
-                      {claim.effectiveDate && (
-                        <span>📅 Created: {new Date(claim.effectiveDate).toLocaleDateString()}</span>
-                      )}
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-4 text-sm text-gray-500">
+                        {claim.howKnown && (
+                          <span className="bg-gray-100 px-3 py-1 rounded-full">
+                            {claim.howKnown.replace('_', ' ')}
+                          </span>
+                        )}
+                        {claim.effectiveDate && (
+                          <span>📅 Created: {new Date(claim.effectiveDate).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => deleteClaim(claim.id)}
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg transition text-sm font-semibold"
+                        title="Delete achievement"
+                      >
+                        🗑️ Delete
+                      </button>
                     </div>
                   </div>
                 </div>

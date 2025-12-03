@@ -23,6 +23,9 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'backend' | 'local'>('backend');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date-desc');
 
   useEffect(() => {
     loadClaims();
@@ -93,6 +96,39 @@ export default function PortfolioPage() {
       console.error('Error deleting claim:', error);
       alert('Failed to delete achievement. Please try again.');
     }
+  };
+
+  const filteredAndSortedClaims = () => {
+    let filtered = [...claims];
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(claim => 
+        claim.statement?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        claim.aspect?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(claim => claim.aspect === categoryFilter);
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      if (sortBy === 'date-desc') {
+        return new Date(b.effectiveDate || '').getTime() - new Date(a.effectiveDate || '').getTime();
+      } else if (sortBy === 'date-asc') {
+        return new Date(a.effectiveDate || '').getTime() - new Date(b.effectiveDate || '').getTime();
+      } else if (sortBy === 'rating-desc') {
+        return (b.stars || 0) - (a.stars || 0);
+      } else if (sortBy === 'rating-asc') {
+        return (a.stars || 0) - (b.stars || 0);
+      }
+      return 0;
+    });
+    
+    return filtered;
   };
 
   const renderStars = (stars?: number) => {
@@ -189,6 +225,91 @@ export default function PortfolioPage() {
           </Link>
         </div>
 
+        {/* Search and Filter Controls */}
+        {claims.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl shadow-md p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Search Bar */}
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🔍 Search Achievements
+                </label>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by keyword or description..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Category Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📁 Filter by Category
+                </label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="project">📁 Project</option>
+                  <option value="skill">💡 Skill</option>
+                  <option value="certification">🎓 Certification</option>
+                  <option value="course">📚 Course</option>
+                  <option value="award">🏆 Award</option>
+                  <option value="publication">📝 Publication</option>
+                  <option value="volunteer">❤️ Volunteer</option>
+                  <option value="hackathon">💻 Hackathon</option>
+                  <option value="research">🔬 Research</option>
+                  <option value="presentation">🎤 Presentation</option>
+                </select>
+              </div>
+
+              {/* Sort By */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🔢 Sort By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="date-desc">📅 Newest First</option>
+                  <option value="date-asc">📅 Oldest First</option>
+                  <option value="rating-desc">⭐ Highest Rated</option>
+                  <option value="rating-asc">⭐ Lowest Rated</option>
+                </select>
+              </div>
+
+              {/* Results Count */}
+              <div className="flex items-end">
+                <div className="text-sm text-gray-600">
+                  Showing <strong>{filteredAndSortedClaims().length}</strong> of <strong>{claims.length}</strong> achievements
+                </div>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {(searchQuery || categoryFilter !== 'all' || sortBy !== 'date-desc') && (
+              <div className="mt-4">
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('all');
+                    setSortBy('date-desc');
+                  }}
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold"
+                >
+                  🔄 Clear All Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
             {error}
@@ -214,7 +335,7 @@ export default function PortfolioPage() {
           </div>
         ) : (
           <div className="grid gap-6">
-            {claims.map((claim) => (
+            {filteredAndSortedClaims().map((claim) => (
               <div
                 key={claim.id}
                 className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 border border-transparent hover:border-indigo-200"
@@ -240,13 +361,22 @@ export default function PortfolioPage() {
                           <span>📅 Created: {new Date(claim.effectiveDate).toLocaleDateString()}</span>
                         )}
                       </div>
-                      <button
-                        onClick={() => deleteClaim(claim.id)}
-                        className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg transition text-sm font-semibold"
-                        title="Delete achievement"
-                      >
-                        🗑️ Delete
-                      </button>
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/edit/${claim.id}`}
+                          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-3 py-1 rounded-lg transition text-sm font-semibold"
+                          title="Edit achievement"
+                        >
+                          ✏️ Edit
+                        </Link>
+                        <button
+                          onClick={() => deleteClaim(claim.id)}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg transition text-sm font-semibold"
+                          title="Delete achievement"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

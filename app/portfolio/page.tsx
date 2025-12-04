@@ -39,21 +39,18 @@ export default function PortfolioPage() {
       const hasBackendToken = token && token !== 'nextauth_session';
       
       if (isAuthenticated && hasBackendToken && (user?.issuerId || user?.id)) {
-        // Try to get claims from backend using user ID (issuer_id)
         const userId = user.issuerId || user.id;
         const response = await fetchClaimsByIssuer(userId, token);
         const backendClaims = response.claims || [];
         setClaims(backendClaims);
         setMode('backend');
       } else {
-        // Fall back to localStorage for OAuth users or unauthenticated users
         const localClaims = getLocalClaims();
         setClaims(localClaims);
         setMode('local');
       }
     } catch (err: any) {
       console.error('Error loading claims:', err);
-      // Fall back to localStorage on error
       const localClaims = getLocalClaims();
       setClaims(localClaims);
       setMode('local');
@@ -70,7 +67,6 @@ export default function PortfolioPage() {
     
     try {
       if (mode === 'backend' && token && token !== 'nextauth_session') {
-        // Delete from backend
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/claims/${claimId}`, {
           method: 'DELETE',
           headers: {
@@ -82,7 +78,6 @@ export default function PortfolioPage() {
         
         alert('Achievement deleted successfully! 🗑️');
       } else {
-        // Delete from localStorage
         const localClaims = getLocalClaims();
         const updatedClaims = localClaims.filter(claim => claim.id !== claimId);
         localStorage.setItem('trustfolio_claims', JSON.stringify(updatedClaims));
@@ -90,7 +85,6 @@ export default function PortfolioPage() {
         alert('Achievement deleted from local storage! 🗑️');
       }
       
-      // Reload claims
       loadClaims();
     } catch (error) {
       console.error('Error deleting claim:', error);
@@ -101,7 +95,6 @@ export default function PortfolioPage() {
   const filteredAndSortedClaims = () => {
     let filtered = [...claims];
     
-    // Apply search filter
     if (searchQuery.trim()) {
       filtered = filtered.filter(claim => 
         claim.statement?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -109,12 +102,10 @@ export default function PortfolioPage() {
       );
     }
     
-    // Apply category filter
     if (categoryFilter !== 'all') {
       filtered = filtered.filter(claim => claim.aspect === categoryFilter);
     }
     
-    // Apply sorting
     filtered.sort((a, b) => {
       if (sortBy === 'date-desc') {
         return new Date(b.effectiveDate || '').getTime() - new Date(a.effectiveDate || '').getTime();
@@ -129,6 +120,111 @@ export default function PortfolioPage() {
     });
     
     return filtered;
+  };
+
+  const exportAchievements = () => {
+    const dataToExport = mode === 'backend' ? claims : getLocalClaims();
+    const dataStr = JSON.stringify(dataToExport, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `trustfolio-achievements-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    alert('✅ Achievements exported successfully!');
+  };
+
+  const importAchievements = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target?.result as string);
+        
+        if (!Array.isArray(importedData)) {
+          alert('❌ Invalid file format. Please upload a valid JSON file.');
+          return;
+        }
+
+        const confirmImport = confirm(
+          `Import ${importedData.length} achievements?\n\n` +
+          `This will ADD to your existing ${claims.length} achievements.\n\n` +
+          `Click OK to continue or Cancel to abort.`
+        );
+
+        if (confirmImport) {
+          const existingClaims = getLocalClaims();
+          const maxId = Math.max(0, ...existingClaims.map(c => c.id));
+          const newClaims = importedData.map((claim, index) => ({
+            ...claim,
+            id: maxId + index + 1,
+          }));
+          
+          const mergedClaims = [...existingClaims, ...newClaims];
+          localStorage.setItem('trustfolio_claims', JSON.stringify(mergedClaims));
+          
+          alert(`✅ Successfully imported ${importedData.length} achievements!`);
+          loadClaims();
+        }
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('❌ Error importing file. Please check the file format.');
+      }
+    };
+    reader.readAsText(file);
+    
+    event.target.value = '';
+  };
+
+  const calculateAnalytics = () => {
+    const totalAchievements = claims.length;
+    const averageRating = claims.length > 0
+      ? (claims.reduce((sum, claim) => sum + (claim.stars || 0), 0) / claims.length).toFixed(1)
+      : '0.0';
+    
+    const categoryBreakdown: { [key: string]: number } = {};
+    claims.forEach(claim => {
+      const category = claim.aspect || 'project';
+      categoryBreakdown[category] = (categoryBreakdown[category] || 0) + 1;
+    });
+    
+    const sortedCategories = Object.entries(categoryBreakdown)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
+    
+    const ratingDistribution: { [key: number]: number } = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    claims.forEach(claim => {
+      const rating = claim.stars || 0;
+      if (rating >= 1 && rating <= 5) {
+        ratingDistribution[rating]++;
+      }
+    });
+    
+    return {
+      totalAchievements,
+      averageRating,
+      categoryBreakdown: sortedCategories,
+      ratingDistribution,
+    };
+  };
+
+  const getCategoryEmoji = (category: string) => {
+    const emojiMap: { [key: string]: string } = {
+      'project': '📁',
+      'skill': '💡',
+      'certification': '🎓',
+      'course': '📚',
+      'award': '🏆',
+      'publication': '📝',
+      'volunteer': '❤️',
+      'hackathon': '💻',
+      'research': '🔬',
+      'presentation': '🎤',
+    };
+    return emojiMap[category] || '🚀';
   };
 
   const renderStars = (stars?: number) => {
@@ -165,6 +261,8 @@ export default function PortfolioPage() {
       </main>
     );
   }
+
+  const analytics = calculateAnalytics();
 
   return (
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -205,6 +303,27 @@ export default function PortfolioPage() {
             >
               + Add Achievement
             </Link>
+            
+            {claims.length > 0 && (
+              <button
+                onClick={exportAchievements}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+                title="Export achievements as JSON"
+              >
+                📥 Export
+              </button>
+            )}
+            
+            <label className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition cursor-pointer">
+              📤 Import
+              <input
+                type="file"
+                accept=".json"
+                onChange={importAchievements}
+                className="hidden"
+              />
+            </label>
+            
             {isAuthenticated && (
               <button
                 onClick={logout}
@@ -225,11 +344,93 @@ export default function PortfolioPage() {
           </Link>
         </div>
 
+        {/* Analytics Dashboard */}
+        {claims.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl shadow-md p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">📊 Analytics Dashboard</h2>
+            
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {/* Total Achievements */}
+              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg">
+                <div className="text-3xl mb-2">🎯</div>
+                <div className="text-2xl font-bold text-indigo-900">{analytics.totalAchievements}</div>
+                <div className="text-sm text-indigo-700">Total Achievements</div>
+              </div>
+              
+              {/* Average Rating */}
+              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-lg">
+                <div className="text-3xl mb-2">⭐</div>
+                <div className="text-2xl font-bold text-yellow-900">{analytics.averageRating}</div>
+                <div className="text-sm text-yellow-700">Average Rating</div>
+              </div>
+              
+              {/* Top Category */}
+              <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
+                <div className="text-3xl mb-2">
+                  {analytics.categoryBreakdown.length > 0 && getCategoryEmoji(analytics.categoryBreakdown[0][0])}
+                </div>
+                <div className="text-2xl font-bold text-green-900 capitalize">
+                  {analytics.categoryBreakdown.length > 0 ? analytics.categoryBreakdown[0][0] : 'N/A'}
+                </div>
+                <div className="text-sm text-green-700">Top Category</div>
+              </div>
+            </div>
+
+            {/* Category Breakdown */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Category Breakdown</h3>
+              <div className="space-y-2">
+                {analytics.categoryBreakdown.map(([category, count]) => (
+                  <div key={category} className="flex items-center gap-3">
+                    <div className="text-2xl">{getCategoryEmoji(category)}</div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-gray-700 capitalize">{category}</span>
+                        <span className="text-sm text-gray-600">{count} ({Math.round((count / analytics.totalAchievements) * 100)}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(count / analytics.totalAchievements) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Rating Distribution */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Rating Distribution</h3>
+              <div className="grid grid-cols-5 gap-2">
+                {[5, 4, 3, 2, 1].map((rating) => (
+                  <div key={rating} className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">{rating}⭐</div>
+                    <div className="bg-gray-200 rounded-lg overflow-hidden" style={{ height: '100px' }}>
+                      <div
+                        className="bg-yellow-400 w-full transition-all duration-300"
+                        style={{
+                          height: analytics.totalAchievements > 0
+                            ? `${(analytics.ratingDistribution[rating] / analytics.totalAchievements) * 100}%`
+                            : '0%',
+                          marginTop: 'auto',
+                        }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">{analytics.ratingDistribution[rating]}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Search and Filter Controls */}
         {claims.length > 0 && (
           <div className="mb-6 bg-white rounded-xl shadow-md p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Search Bar */}
               <div className="md:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   🔍 Search Achievements
@@ -243,7 +444,6 @@ export default function PortfolioPage() {
                 />
               </div>
 
-              {/* Category Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   📁 Filter by Category
@@ -267,7 +467,6 @@ export default function PortfolioPage() {
                 </select>
               </div>
 
-              {/* Sort By */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   🔢 Sort By
@@ -284,7 +483,6 @@ export default function PortfolioPage() {
                 </select>
               </div>
 
-              {/* Results Count */}
               <div className="flex items-end">
                 <div className="text-sm text-gray-600">
                   Showing <strong>{filteredAndSortedClaims().length}</strong> of <strong>{claims.length}</strong> achievements
@@ -292,7 +490,6 @@ export default function PortfolioPage() {
               </div>
             </div>
 
-            {/* Clear Filters Button */}
             {(searchQuery || categoryFilter !== 'all' || sortBy !== 'date-desc') && (
               <div className="mt-4">
                 <button

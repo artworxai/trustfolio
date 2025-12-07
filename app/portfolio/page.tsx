@@ -227,6 +227,13 @@ export default function PortfolioPage() {
     return emojiMap[category] || '🚀';
   };
 
+  const sharePortfolio = () => {
+    const username = user?.email?.split('@')[0] || 'demo';
+    const shareUrl = `${window.location.origin}/p/${username}`;
+    navigator.clipboard.writeText(shareUrl);
+    alert(`✅ Portfolio link copied to clipboard!\n\n${shareUrl}\n\nShare this link with anyone!`);
+  };
+
   const renderStars = (stars?: number) => {
     if (!stars) return null;
     return (
@@ -306,6 +313,16 @@ export default function PortfolioPage() {
             
             {claims.length > 0 && (
               <button
+                onClick={sharePortfolio}
+                className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 transition"
+                title="Share your portfolio"
+              >
+                🔗 Share
+              </button>
+            )}
+            
+            {claims.length > 0 && (
+              <button
                 onClick={exportAchievements}
                 className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition"
                 title="Export achievements as JSON"
@@ -335,12 +352,18 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-6 flex justify-between items-center">
           <Link
             href="/"
             className="text-indigo-600 hover:text-indigo-800 font-semibold"
           >
             ← Home
+          </Link>
+          <Link
+            href="/settings"
+            className="text-gray-600 hover:text-gray-900 font-semibold"
+          >
+            ⚙️ Settings
           </Link>
         </div>
 
@@ -349,23 +372,19 @@ export default function PortfolioPage() {
           <div className="mb-6 bg-white rounded-xl shadow-md p-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">📊 Analytics Dashboard</h2>
             
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              {/* Total Achievements */}
               <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg">
                 <div className="text-3xl mb-2">🎯</div>
                 <div className="text-2xl font-bold text-indigo-900">{analytics.totalAchievements}</div>
                 <div className="text-sm text-indigo-700">Total Achievements</div>
               </div>
               
-              {/* Average Rating */}
               <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-lg">
                 <div className="text-3xl mb-2">⭐</div>
                 <div className="text-2xl font-bold text-yellow-900">{analytics.averageRating}</div>
                 <div className="text-sm text-yellow-700">Average Rating</div>
               </div>
               
-              {/* Top Category */}
               <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
                 <div className="text-3xl mb-2">
                   {analytics.categoryBreakdown.length > 0 && getCategoryEmoji(analytics.categoryBreakdown[0][0])}
@@ -377,7 +396,6 @@ export default function PortfolioPage() {
               </div>
             </div>
 
-            {/* Category Breakdown */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Category Breakdown</h3>
               <div className="space-y-2">
@@ -401,7 +419,6 @@ export default function PortfolioPage() {
               </div>
             </div>
 
-            {/* Rating Distribution */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Rating Distribution</h3>
               <div className="grid grid-cols-5 gap-2">
@@ -513,7 +530,6 @@ export default function PortfolioPage() {
           </div>
         )}
 
-        {/* Claims Grid */}
         {claims.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-4">📭</div>

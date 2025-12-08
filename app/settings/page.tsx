@@ -1,3 +1,21 @@
+/**
+ * Settings Page Component
+ * 
+ * User account settings and profile management interface.
+ * 
+ * Features:
+ * - Edit display name and bio
+ * - View email (read-only)
+ * - Copy public portfolio link
+ * - Change password (demo mode)
+ * - Delete account with double confirmation
+ * - All settings persist to localStorage
+ * 
+ * @component
+ * @author Dana Martinez
+ * @since December 2025
+ */
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -5,62 +23,108 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 
+/**
+ * Settings Page Component
+ * 
+ * Provides user interface for managing account settings, profile information,
+ * password changes, and account deletion. Requires authentication to access.
+ * 
+ * @returns {JSX.Element|null} Settings page or null if not authenticated
+ */
 export default function SettingsPage() {
+  // Authentication context for user data and auth methods
   const { user, token, isAuthenticated, logout } = useAuth();
   const router = useRouter();
-  const [displayName, setDisplayName] = useState('');
-  const [bio, setBio] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  
+  // Form state management
+  const [displayName, setDisplayName] = useState('');      // User's display name for public profile
+  const [bio, setBio] = useState('');                      // User biography (500 char max)
+  const [currentPassword, setCurrentPassword] = useState(''); // For password change validation
+  const [newPassword, setNewPassword] = useState('');      // New password
+  const [confirmPassword, setConfirmPassword] = useState(''); // Password confirmation
+  const [loading, setLoading] = useState(false);           // Loading state for async operations
 
+  /**
+   * Load user settings from localStorage on component mount
+   * Redirects to login if user is not authenticated
+   */
   useEffect(() => {
+    // Redirect unauthenticated users to login page
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
 
-    // Load user settings from localStorage
+    // Load saved settings from localStorage
     const savedSettings = localStorage.getItem('trustfolio_settings');
     if (savedSettings) {
       const settings = JSON.parse(savedSettings);
       setDisplayName(settings.displayName || '');
       setBio(settings.bio || '');
     } else {
-      // Set defaults from user
+      // Use default values from user object if no saved settings
       setDisplayName(user?.name || user?.email || '');
     }
   }, [isAuthenticated, router, user]);
 
+  /**
+   * Save profile settings to localStorage
+   * 
+   * Updates display name and bio. Settings are saved locally and used
+   * for public portfolio display.
+   * 
+   * @function saveProfile
+   * @returns {void}
+   */
   const saveProfile = () => {
     setLoading(true);
 
-    // Save to localStorage
+    // Create settings object with timestamp
     const settings = {
       displayName,
       bio,
       updatedAt: new Date().toISOString(),
     };
+    
+    // Save to localStorage
     localStorage.setItem('trustfolio_settings', JSON.stringify(settings));
 
+    // Simulate async save with delay and show success message
     setTimeout(() => {
       setLoading(false);
       alert('✅ Profile updated successfully!');
     }, 500);
   };
 
+  /**
+   * Change user password (demo mode)
+   * 
+   * Validates password requirements and shows success message.
+   * Note: This is a demo implementation. In production, this would
+   * make an API call to update the password securely.
+   * 
+   * Validation rules:
+   * - All fields must be filled
+   * - New password must match confirmation
+   * - Password must be at least 6 characters
+   * 
+   * @function changePassword
+   * @returns {void}
+   */
   const changePassword = () => {
+    // Validate all fields are filled
     if (!currentPassword || !newPassword || !confirmPassword) {
       alert('❌ Please fill in all password fields.');
       return;
     }
 
+    // Validate passwords match
     if (newPassword !== confirmPassword) {
       alert('❌ New passwords do not match.');
       return;
     }
 
+    // Validate minimum password length
     if (newPassword.length < 6) {
       alert('❌ New password must be at least 6 characters long.');
       return;
@@ -68,17 +132,36 @@ export default function SettingsPage() {
 
     setLoading(true);
 
-    // In a real app, this would call the backend API
+    // Demo implementation - in production this would call backend API
     setTimeout(() => {
       setLoading(false);
       alert('✅ Password changed successfully!\n\nNote: This is a demo. In production, this would update your actual password.');
+      
+      // Clear password fields after successful change
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     }, 500);
   };
 
+  /**
+   * Delete user account with double confirmation
+   * 
+   * Implements a two-step confirmation process to prevent accidental deletion:
+   * 1. Initial confirmation dialog explaining what will be deleted
+   * 2. Text input confirmation requiring user to type "DELETE"
+   * 
+   * On confirmation:
+   * - Clears all achievement data from localStorage
+   * - Clears all settings from localStorage
+   * - Logs user out
+   * - Redirects to home page
+   * 
+   * @function deleteAccount
+   * @returns {void}
+   */
   const deleteAccount = () => {
+    // First confirmation - show warning dialog
     const confirmDelete = confirm(
       '⚠️ WARNING: Delete Account?\n\n' +
       'This will permanently delete:\n' +
@@ -90,20 +173,25 @@ export default function SettingsPage() {
     );
 
     if (confirmDelete) {
+      // Second confirmation - require exact text match
       const confirmation = prompt('Type "DELETE" to confirm account deletion:');
       if (confirmation === 'DELETE') {
-        // Clear all data
+        // Clear all user data from localStorage
         localStorage.removeItem('trustfolio_claims');
         localStorage.removeItem('trustfolio_settings');
+        
+        // Notify user and log out
         alert('✅ Account deleted. You will be logged out.');
         logout();
         router.push('/');
       } else {
+        // Cancelled or incorrect confirmation text
         alert('❌ Account deletion cancelled. Incorrect confirmation.');
       }
     }
   };
 
+  // Don't render anything while checking authentication
   if (!isAuthenticated) {
     return null;
   }
@@ -111,12 +199,13 @@ export default function SettingsPage() {
   return (
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
+        {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">⚙️ Settings</h1>
           <p className="text-gray-600">Manage your account and preferences</p>
         </div>
 
+        {/* Navigation Link */}
         <div className="mb-6">
           <Link
             href="/portfolio"
@@ -126,12 +215,12 @@ export default function SettingsPage() {
           </Link>
         </div>
 
-        {/* Profile Settings */}
+        {/* Profile Settings Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">👤 Profile Settings</h2>
           
           <div className="space-y-4">
-            {/* Display Name */}
+            {/* Display Name Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Display Name
@@ -146,7 +235,7 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mt-1">This name will appear on your public portfolio</p>
             </div>
 
-            {/* Email (Read-only) */}
+            {/* Email Field (Read-only) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email
@@ -160,7 +249,7 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
             </div>
 
-            {/* Bio */}
+            {/* Bio Textarea */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Bio
@@ -176,7 +265,7 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mt-1">{bio.length}/500 characters</p>
             </div>
 
-            {/* Public Portfolio Link */}
+            {/* Public Portfolio Link with Copy Button */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Your Public Portfolio Link
@@ -190,6 +279,7 @@ export default function SettingsPage() {
                 />
                 <button
                   onClick={() => {
+                    // Extract username from email and copy full URL to clipboard
                     const username = user?.email?.split('@')[0] || 'demo';
                     const shareUrl = `${window.location.origin}/p/${username}`;
                     navigator.clipboard.writeText(shareUrl);
@@ -202,6 +292,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Save Profile Button */}
             <button
               onClick={saveProfile}
               disabled={loading}
@@ -212,11 +303,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Password Settings */}
+        {/* Password Change Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">🔒 Change Password</h2>
           
           <div className="space-y-4">
+            {/* Current Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Current Password
@@ -230,6 +322,7 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* New Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 New Password
@@ -243,6 +336,7 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* Confirm New Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm New Password
@@ -256,6 +350,7 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* Change Password Button */}
             <button
               onClick={changePassword}
               disabled={loading}
@@ -266,7 +361,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Danger Zone */}
+        {/* Danger Zone - Account Deletion */}
         <div className="bg-white rounded-xl shadow-md p-6 border-2 border-red-200">
           <h2 className="text-2xl font-bold text-red-900 mb-4">⚠️ Danger Zone</h2>
           
@@ -284,7 +379,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Footer Info */}
+        {/* Account Information Footer */}
         <div className="mt-8 p-6 bg-white rounded-xl shadow-md">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">
             Account Information
